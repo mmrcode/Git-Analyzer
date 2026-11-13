@@ -4,7 +4,8 @@ from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.models.schemas import (
     AIProjectSummary, AIFileExplanation, AIChatResponse,
-    TechnologyAnalysis, RepoMetadata, ParsedFileInfo
+    TechnologyAnalysis, RepoMetadata, ParsedFileInfo,
+    AIComparisonRecommendation, RecommendationCategory, RepoComparisonItem
 )
 
 class GeminiService:
@@ -323,6 +324,290 @@ Please answer the user's question accurately, citing specific files from the rep
         return AIChatResponse(
             answer=ans,
             referenced_files=referenced[:5]
+        )
+
+    async def compare_repositories(
+        self,
+        repositories: List[RepoComparisonItem],
+        objective: str,
+        objective_label: str,
+        custom_key: Optional[str] = None
+    ) -> AIComparisonRecommendation:
+        """
+        Generates an in-depth AI comparison across 2 or 3 GitHub repositories using Google Gemini.
+        Returns comparative categories, strengths/weaknesses, differences, and a reasoned final verdict.
+        Falls back smoothly to static comparative analysis if the API key is unavailable.
+        """
+        repo_data_summaries = []
+        for r in repositories:
+            tech_names = [f"{t.name} ({t.category})" for t in r.technology.technologies[:10]]
+            scores = r.scores
+            repo_data_summaries.append(f"""
+=== REPOSITORY: {r.full_name} ===
+URL: {r.repo_url}
+Description: {r.metadata.description or 'No description provided'}
+Primary Language: {r.technology.primary_language}
+GitHub Stars: {r.measured_metrics.stars} | Forks: {r.measured_metrics.forks} | Issues: {r.measured_metrics.open_issues}
+Size: {r.measured_metrics.size_kb} KB | Total Files: {r.measured_metrics.total_files} | Total Dirs: {r.measured_metrics.total_directories}
+Source Files: {r.measured_metrics.source_files_count} | Test Files: {r.measured_metrics.test_files_count} | Doc Files: {r.measured_metrics.doc_files_count}
+Parsed Classes: {r.measured_metrics.total_classes} | Parsed Functions: {r.measured_metrics.total_functions} | Docstring Coverage: {r.measured_metrics.docstring_coverage_pct}%
+License: {r.metadata.license or 'None explicitly detected'}
+Last Updated: {r.metadata.updated_at or 'Unknown'}
+Technologies Detected: {', '.join(tech_names) or 'None in manifests'}
+Scores (0-100):
+  - Overall Weighted Score: {r.weighted_score} (Rank: #{r.rank})
+  - Code Quality: {scores.code_quality.score}
+  - Architecture: {scores.architecture.score}
+  - Documentation: {scores.documentation.score}
+  - Testing: {scores.testing.score}
+  - Maintainability: {scores.maintainability.score}
+  - Technology: {scores.technology.score}
+  - Activity: {scores.activity.score}
+  - Security: {scores.security.score}
+""")
+
+        prompt = f"""
+You are an expert software engineering reviewer and computer science academic evaluator.
+Evaluate and compare the following {len(repositories)} GitHub repositories side by side.
+Comparison Objective chosen by user: "{objective_label}" ({objective}).
+
+{chr(10).join(repo_data_summaries)}
+
+IMPORTANT EVALUATION RULES:
+1. Ground your answers strictly in the provided data. Do not hallucinate or invent missing metrics or features.
+2. If certain information is missing (e.g. test files or license), explicitly state that it could not be determined from repository manifests.
+3. Do not assume high stars mean high code quality.
+4. For each recommendation category, specify the exact repository full_name as "winner_repo" and explain WHY with concrete evidence.
+5. Provide genuine, balanced strengths and weaknesses for EACH repository.
+
+Return ONLY a JSON object with this exact structure:
+{{
+  "summary": "2-3 paragraphs comparing the projects, their paradigms, and overall impressions.",
+  "best_overall": {{
+    "winner_repo": "owner/repo",
+    "title": "Best Repository Overall",
+    "reasoning": "Detailed reasoning based on code quality, architecture, and maintainability."
+  }},
+  "best_for_beginners": {{
+    "winner_repo": "owner/repo",
+    "title": "Best for Beginners",
+    "reasoning": "Reasoning based on simplicity, documentation, and ease of reading."
+  }},
+  "best_for_advanced": {{
+    "winner_repo": "owner/repo",
+    "title": "Best for Advanced Developers",
+    "reasoning": "Reasoning based on architectural complexity, patterns, and depth."
+  }},
+  "best_for_learning": {{
+    "winner_repo": "owner/repo",
+    "title": "Best for Learning New Technologies",
+    "reasoning": "Reasoning based on modern tech stack and idiomatic usage."
+  }},
+  "best_for_academic": {{
+    "winner_repo": "owner/repo",
+    "title": "Best for MCA Students & Academic Projects",
+    "reasoning": "Reasoning based on viva examination defense, modularity, and report suitability."
+  }},
+  "best_architecture": {{
+    "winner_repo": "owner/repo",
+    "title": "Best in Terms of Architecture",
+    "reasoning": "Reasoning based on separation of concerns, dependency structure, and design patterns."
+  }},
+  "best_maintainability": {{
+    "winner_repo": "owner/repo",
+    "title": "Best in Terms of Maintainability",
+    "reasoning": "Reasoning based on file sizes, documentation, and code organization."
+  }},
+  "strengths": {{
+    "{repositories[0].full_name}": ["Strength 1", "Strength 2", "Strength 3"],
+    {f'"{repositories[1].full_name}": ["Strength 1", "Strength 2", "Strength 3"]' if len(repositories) > 1 else ''}
+    {f', "{repositories[2].full_name}": ["Strength 1", "Strength 2", "Strength 3"]' if len(repositories) > 2 else ''}
+  }},
+  "weaknesses": {{
+    "{repositories[0].full_name}": ["Weakness 1", "Weakness 2"],
+    {f'"{repositories[1].full_name}": ["Weakness 1", "Weakness 2"]' if len(repositories) > 1 else ''}
+    {f', "{repositories[2].full_name}": ["Weakness 1", "Weakness 2"]' if len(repositories) > 2 else ''}
+  }},
+  "key_differences": [
+    "Difference 1 regarding architecture, tech stack, or testing",
+    "Difference 2 regarding project scope, maintenance, or complexity",
+    "Difference 3 regarding suitability for specific use cases"
+  ],
+  "final_verdict": "Comprehensive concluding paragraph recommending which repository to choose based on user objectives and trade-offs."
+}}
+"""
+
+        response_text = await self._call_gemini_api(
+            prompt=prompt,
+            system_instruction="You are a senior software engineering evaluator. Compare repositories objectively. Return ONLY valid JSON.",
+            custom_key=custom_key,
+            temperature=0.3
+        )
+
+        if response_text:
+            try:
+                clean_json = response_text
+                if "```json" in clean_json:
+                    clean_json = clean_json.split("```json")[1].split("```")[0]
+                elif "```" in clean_json:
+                    clean_json = clean_json.split("```")[1].split("```")[0]
+
+                data = json.loads(clean_json.strip())
+
+                def parse_cat(cat_key: str, default_title: str) -> RecommendationCategory:
+                    cat_obj = data.get(cat_key, {})
+                    w_repo = cat_obj.get("winner_repo") or repositories[0].full_name
+                    # Make sure w_repo matches one of the compared repos
+                    matched = next((r.full_name for r in repositories if r.full_name.lower() == str(w_repo).lower()), repositories[0].full_name)
+                    return RecommendationCategory(
+                        winner_repo=matched,
+                        title=cat_obj.get("title", default_title),
+                        reasoning=cat_obj.get("reasoning", "Detailed comparative analysis determined this repository as the most suitable.")
+                    )
+
+                return AIComparisonRecommendation(
+                    summary=data.get("summary", ""),
+                    best_overall=parse_cat("best_overall", "Best Repository Overall"),
+                    best_for_beginners=parse_cat("best_for_beginners", "Best for Beginners"),
+                    best_for_advanced=parse_cat("best_for_advanced", "Best for Advanced Developers"),
+                    best_for_learning=parse_cat("best_for_learning", "Best for Learning New Technologies"),
+                    best_for_academic=parse_cat("best_for_academic", "Best for MCA Students & Academic Projects"),
+                    best_architecture=parse_cat("best_architecture", "Best Architecture"),
+                    best_maintainability=parse_cat("best_maintainability", "Best Maintainability"),
+                    strengths=data.get("strengths", {}),
+                    weaknesses=data.get("weaknesses", {}),
+                    key_differences=data.get("key_differences", []),
+                    final_verdict=data.get("final_verdict", ""),
+                    is_ai_generated=True
+                )
+            except Exception:
+                pass
+
+        # Static fallback
+        return self._generate_fallback_comparison(repositories, objective, objective_label)
+
+    def _generate_fallback_comparison(
+        self,
+        repositories: List[RepoComparisonItem],
+        objective: str,
+        objective_label: str
+    ) -> AIComparisonRecommendation:
+        """
+        Rule-based heuristic comparison synthesis when Gemini API key is absent or offline.
+        Uses measured metrics, category scores, and objective weighting.
+        """
+        top_repo = repositories[0]
+        runner_up = repositories[1] if len(repositories) > 1 else top_repo
+
+        repo_names = [r.full_name for r in repositories]
+        summary = (
+            f"Comparative analysis was performed across {len(repositories)} repositories: {', '.join(repo_names)}. "
+            f"Under the objective '{objective_label}', **{top_repo.full_name}** achieved the top score of "
+            f"{top_repo.weighted_score}/100, followed by **{runner_up.full_name}** ({runner_up.weighted_score}/100). "
+            f"The evaluation analyzed source code structure, testing coverage, documentation completeness, and technological architecture."
+        )
+
+        # Determine category winners based on category scores
+        def find_best_by_score(cat_name: str) -> RepoComparisonItem:
+            return max(repositories, key=lambda r: getattr(r.scores, cat_name).score)
+
+        best_arch = find_best_by_score("architecture")
+        best_maint = find_best_by_score("maintainability")
+        best_doc = find_best_by_score("documentation")
+        best_cq = find_best_by_score("code_quality")
+        best_tech = find_best_by_score("technology")
+
+        strengths: Dict[str, List[str]] = {}
+        weaknesses: Dict[str, List[str]] = {}
+
+        for r in repositories:
+            r_strengths = []
+            r_weaknesses = []
+
+            if r.measured_metrics.test_files_count > 0:
+                r_strengths.append(f"Includes {r.measured_metrics.test_files_count} test files for automated verification.")
+            else:
+                r_weaknesses.append("No automated test suite detected in repository files.")
+
+            if r.metadata.has_readme and len(r.metadata.readme_content or "") > 800:
+                r_strengths.append("Comprehensive README documentation with usage guidelines.")
+            elif not r.metadata.has_readme:
+                r_weaknesses.append("Missing README document, making initial onboarding difficult.")
+
+            if r.measured_metrics.total_classes > 0:
+                r_strengths.append(f"Well-structured object-oriented design with {r.measured_metrics.total_classes} classes.")
+
+            if r.metadata.license:
+                r_strengths.append(f"Explicit open-source license: {r.metadata.license}.")
+            else:
+                r_weaknesses.append("No open-source license explicitly detected; commercial or academic usage rights unclarified.")
+
+            if r.measured_metrics.docstring_coverage_pct < 10.0:
+                r_weaknesses.append(f"Low in-code docstring coverage ({r.measured_metrics.docstring_coverage_pct}%).")
+
+            if not r_strengths:
+                r_strengths.append(f"Clean {r.technology.primary_language} repository structure.")
+            if not r_weaknesses:
+                r_weaknesses.append("Could benefit from broader CI/CD workflow manifests.")
+
+            strengths[r.full_name] = r_strengths
+            weaknesses[r.full_name] = r_weaknesses
+
+        key_differences = [
+            f"Primary Language & Tooling: {', '.join([f'{r.full_name} ({r.technology.primary_language})' for r in repositories])}.",
+            f"Codebase Scale: {', '.join([f'{r.full_name} ({r.measured_metrics.total_files} files, {r.measured_metrics.size_kb} KB)' for r in repositories])}.",
+            f"Testing & Verification: {', '.join([f'{r.full_name} ({r.measured_metrics.test_files_count} test files)' for r in repositories])}."
+        ]
+
+        final_verdict = (
+            f"For the selected objective of '{objective_label}', **{top_repo.full_name}** is the recommended choice. "
+            f"It demonstrated stronger relative performance in {best_arch.full_name == top_repo.full_name and 'system architecture, ' or ''}"
+            f"maintainability ({top_repo.scores.maintainability.score}/100), and code organization. "
+            f"However, if specific focus is placed on learning or documentation, compare the individual score breakdowns above."
+        )
+
+        return AIComparisonRecommendation(
+            summary=summary,
+            best_overall=RecommendationCategory(
+                winner_repo=top_repo.full_name,
+                title="Best Repository Overall",
+                reasoning=f"Achieved the highest composite score of {top_repo.weighted_score}/100 across measured quality, maintainability, and architectural criteria."
+            ),
+            best_for_beginners=RecommendationCategory(
+                winner_repo=best_doc.full_name,
+                title="Best for Beginners",
+                reasoning=f"{best_doc.full_name} offers the most accessible documentation and clearer onboarding guides (Documentation score: {best_doc.scores.documentation.score}/100)."
+            ),
+            best_for_advanced=RecommendationCategory(
+                winner_repo=best_arch.full_name,
+                title="Best for Advanced Developers",
+                reasoning=f"{best_arch.full_name} shows greater structural depth and module segregation (Architecture score: {best_arch.scores.architecture.score}/100)."
+            ),
+            best_for_learning=RecommendationCategory(
+                winner_repo=best_tech.full_name,
+                title="Best for Learning New Technologies",
+                reasoning=f"{best_tech.full_name} leverages a diverse tech stack with {best_tech.measured_metrics.technologies_count} identified components."
+            ),
+            best_for_academic=RecommendationCategory(
+                winner_repo=top_repo.full_name,
+                title="Best for MCA Students & Academic Projects",
+                reasoning=f"Strong balance of architectural clarity and viva explainability, with clear separation of concerns."
+            ),
+            best_architecture=RecommendationCategory(
+                winner_repo=best_arch.full_name,
+                title="Best Architecture",
+                reasoning=f"Highest architecture score ({best_arch.scores.architecture.score}/100) with clear entry points and dependency graphs."
+            ),
+            best_maintainability=RecommendationCategory(
+                winner_repo=best_maint.full_name,
+                title="Best Maintainability",
+                reasoning=f"Highest maintainability score ({best_maint.scores.maintainability.score}/100) reflecting modular file sizing and clean organization."
+            ),
+            strengths=strengths,
+            weaknesses=weaknesses,
+            key_differences=key_differences,
+            final_verdict=final_verdict,
+            is_ai_generated=False
         )
 
 gemini_service = GeminiService()

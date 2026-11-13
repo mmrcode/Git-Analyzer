@@ -1,4 +1,4 @@
-import { FullRepoAnalysis, AIFileExplanation, ParsedFileInfo } from '../types';
+import { FullRepoAnalysis, AIFileExplanation, ParsedFileInfo, RepoComparisonResponse } from '../types';
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 const API_BASE = `${API_ORIGIN}/api`;
@@ -111,3 +111,46 @@ export async function exportReport(
 
   return res.text();
 }
+
+export async function compareRepositories(
+  repositories: string[],
+  objective: string = 'best_overall',
+  githubToken?: string,
+  geminiApiKey?: string
+): Promise<RepoComparisonResponse> {
+  const res = await fetch(`${API_BASE}/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      repositories,
+      objective,
+      github_token: githubToken?.trim() || undefined,
+      gemini_api_key: geminiApiKey?.trim() || undefined,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Comparison failed with status ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function exportComparisonReport(
+  type: 'markdown' | 'html',
+  comparison: RepoComparisonResponse
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/compare/export/${type}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(comparison),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to generate ${type} comparison report.`);
+  }
+
+  return res.text();
+}
+

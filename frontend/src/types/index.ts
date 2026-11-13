@@ -164,3 +164,101 @@ export interface UserConfig {
   geminiApiKey: string;
   githubToken: string;
 }
+
+// --- Module 6: Multi-Repository Comparison & Scoring ---
+export type ComparisonObjective =
+  | 'best_overall'
+  | 'beginners'
+  | 'mca_mini_project'
+  | 'final_year_project'
+  | 'portfolio'
+  | 'learning'
+  | 'production';
+
+export interface CategoryScore {
+  name: string;
+  score: number;
+  weight: number;
+  weighted_score: number;
+  rationale: string;
+  is_heuristic: boolean;
+}
+
+export interface ScoreBreakdown {
+  code_quality: CategoryScore;
+  architecture: CategoryScore;
+  documentation: CategoryScore;
+  testing: CategoryScore;
+  maintainability: CategoryScore;
+  technology: CategoryScore;
+  activity: CategoryScore;
+  security: CategoryScore;
+}
+
+export interface MeasuredMetrics {
+  stars: number;
+  forks: number;
+  open_issues: number;
+  size_kb: number;
+  total_files: number;
+  total_directories: number;
+  source_files_count: number;
+  test_files_count: number;
+  doc_files_count: number;
+  parsed_modules_count: number;
+  total_classes: number;
+  total_functions: number;
+  docstring_coverage_pct: number;
+  license_name?: string;
+  last_updated?: string;
+  created_at?: string;
+  primary_language: string;
+  technologies_count: number;
+}
+
+export interface RepoComparisonItem {
+  repo_url: string;
+  full_name: string;
+  metadata: RepoMetadata;
+  technology: TechnologyAnalysis;
+  measured_metrics: MeasuredMetrics;
+  scores: ScoreBreakdown;
+  base_score: number;
+  weighted_score: number;
+  rank: number;
+  is_winner: boolean;
+  analysis: FullRepoAnalysis;
+}
+
+export interface RecommendationCategory {
+  winner_repo: string;
+  title: string;
+  reasoning: string;
+}
+
+export interface AIComparisonRecommendation {
+  summary: string;
+  best_overall: RecommendationCategory;
+  best_for_beginners: RecommendationCategory;
+  best_for_advanced: RecommendationCategory;
+  best_for_learning: RecommendationCategory;
+  best_for_academic: RecommendationCategory;
+  best_architecture: RecommendationCategory;
+  best_maintainability: RecommendationCategory;
+  strengths: Record<string, string[]>;
+  weaknesses: Record<string, string[]>;
+  key_differences: string[];
+  final_verdict: string;
+  is_ai_generated: boolean;
+}
+
+export interface RepoComparisonResponse {
+  repositories: RepoComparisonItem[];
+  objective: string;
+  objective_label: string;
+  comparison_date: string;
+  ai_recommendation: AIComparisonRecommendation;
+  winner_repo_name: string;
+  winner_summary: string;
+}
+

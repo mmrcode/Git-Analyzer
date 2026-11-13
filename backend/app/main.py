@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.config import settings
-from app.routers import analyze, ai, export
+from app.routers import analyze, ai, export, compare
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(analyze.router, prefix=settings.API_PREFIX)
 app.include_router(ai.router, prefix=settings.API_PREFIX)
 app.include_router(export.router, prefix=settings.API_PREFIX)
+app.include_router(compare.router, prefix=settings.API_PREFIX)
 
 @app.get("/api/health")
 def health_check():

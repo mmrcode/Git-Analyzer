@@ -23,6 +23,7 @@ The **GitHub Project Analyzer** is an end-to-end web-based application that anal
 - Automated installation prerequisites, environment variables, startup and test commands
 - **MCA Viva Examination Prep Generator** with categorized technical questions, model answers, and study mode
 - **Google Gemini AI Integration** (using Google's **Free Gemini API Key**) for high-level architecture overviews, file/function walkthroughs, and interactive repository Q&A
+- **Multi-Repository Comparison & AI Recommendation Engine**: Compare 2 or 3 public GitHub repositories simultaneously with transparent weighted scoring, custom objective rebalancing, interactive 8-axis Radar chart, 12-category side-by-side matrix, and reasoned Gemini AI trade-off evaluations
 - One-click report export to **Markdown (`.md`)**, **Print-Ready HTML/PDF**, and **JSON**.
 
 ---
@@ -127,7 +128,7 @@ Open your browser at: [http://localhost:3000](http://localhost:3000)
 
 ## 5. Running Unit Tests (Pytest)
 
-The project includes unit tests verifying URL parsing, file classification, Python AST parsing, TypeScript syntax parsing, and Viva question synthesis:
+The project includes an automated test suite verifying URL parsing, file classification, Python AST parsing, TypeScript syntax parsing, Viva question synthesis, multi-repository comparison scoring, objective weight rebalancing, and report export generators:
 
 ```bash
 cd backend
@@ -138,16 +139,86 @@ Output:
 ============================= test session starts =============================
 platform win32 -- Python 3.14.2, pytest-9.1.1, pluggy-1.7.0
 rootdir: C:\Users\moham\Documents\Git Analyzer\backend
-collected 5 items
+collected 13 items
 
 tests\test_analyzer.py .....                                             [100%]
 
-============================== 5 passed in 1.42s ==============================
+============================= 13 passed in 0.67s ==============================
 ```
 
 ---
 
-## 6. Deployment (Netlify + Render)
+## 6. Multi-Repository Comparison & AI Recommendation Engine
+
+The **Multi-Repository Comparison** feature allows developers, educators, and MCA students to evaluate **2 or 3 GitHub repositories concurrently** to make reasoned decisions on which project is best suited for their specific goals.
+
+### Key Capabilities:
+- **Parallel Independent Analysis:** Concurrently executes recursive tree analysis, AST parsing, and manifest inspection for up to 3 repositories using asynchronous concurrency.
+- **Transparent Weighted Scoring (100-Point Scale):**
+  - Code quality indicators: 20%
+  - Architecture and structure: 15%
+  - Documentation completeness: 10%
+  - Testing & verification: 10%
+  - Maintainability: 15%
+  - Technology stack & implementation: 10%
+  - Project activity & maintenance: 10%
+  - Security indicators: 10%
+- **Dynamic Comparison Objectives:**
+  - `best_overall`: Balanced standard weighting across all dimensions.
+  - `beginners`: Elevates documentation (25%) and maintainability (20%) for code readability and simplicity.
+  - `mca_mini_project`: Elevates architecture (25%) and documentation (20%) for viva defense and project clarity.
+  - `final_year_project`: Demands architectural depth (20%), code quality (20%), and automated testing (15%).
+  - `portfolio`: Highlights modern technology stacks (20%), architecture (20%), and maintenance.
+  - `learning`: Focuses on documentation (25%), clean architecture (20%), and idiomatic patterns.
+  - `production`: Strictly enforces automated test coverage (20%), code quality (20%), and security (15%).
+- **Interactive Visualizations:**
+  - **8-Axis SVG Radar Chart:** Overlays multi-dimensional performance across all 8 evaluation criteria.
+  - **Grouped Telemetry Bar Charts:** Direct comparison of Stars, Forks, Open Issues, and File metrics.
+  - **Language Distribution Progress:** Side-by-side breakdowns of code composition and file counts.
+- **12-Category Side-by-Side Matrix:**
+  - A. Repository Information
+  - B. Programming Languages
+  - C. Frameworks and Technologies
+  - D. GitHub Statistics
+  - E. Code Quality Indicators
+  - F. Project Architecture
+  - G. Documentation
+  - H. Testing
+  - I. Dependencies
+  - J. Maintainability
+  - K. Project Complexity
+  - L. Security Indicators
+- **Google Gemini AI Comparative Reasoning:**
+  - Categorical winners for: Overall Best, Beginners, MCA Academic, Advanced Developers, Learning New Tech, Architecture, and Maintainability.
+  - Honest strengths & areas for improvement for each repository.
+  - Key architectural and implementation differences.
+  - Actionable final recommendation with reasoned trade-offs.
+- **Deep Single-Repo Exploration:** One-click "Inspect Deeply" button loads any compared repository directly into the full 6-tab analyzer without re-fetching.
+- **Multi-Format Export:** Export comprehensive comparison reports to **Printable HTML/PDF**, **Markdown (`.md`)**, and **Raw JSON**.
+
+### Comparison API Endpoint:
+`POST /api/compare`
+
+**Request Payload:**
+```json
+{
+  "repositories": [
+    "https://github.com/tiangolo/fastapi",
+    "https://github.com/pallets/flask"
+  ],
+  "objective": "best_overall",
+  "github_token": "optional_token",
+  "gemini_api_key": "optional_gemini_key"
+}
+```
+
+**Export Endpoints:**
+- `POST /api/compare/export/markdown`: Formatted Markdown comparison report.
+- `POST /api/compare/export/html`: Print-ready HTML comparison report with automated print dialog.
+
+---
+
+## 7. Deployment (Netlify + Render)
 
 The React frontend can be hosted on Netlify, but the FastAPI backend must also be deployed because Netlify serves static frontend files. This repository includes a Render blueprint for the backend.
 
@@ -161,7 +232,7 @@ The frontend uses `/api` automatically in local development, where Vite proxies 
 
 ---
 
-## 7. Project Directory Layout
+## 8. Project Directory Layout
 
 ```
 Git Analyzer/
@@ -170,26 +241,29 @@ Git Analyzer/
 │   │   ├── config.py                  # App configuration & Gemini settings
 │   │   ├── main.py                    # FastAPI application & CORS setup
 │   │   ├── models/
-│   │   │   └── schemas.py             # Pydantic data models for all 6 modules
+│   │   │   └── schemas.py             # Pydantic data models for all analysis & comparison
 │   │   ├── services/
 │   │   │   ├── github_service.py      # Module 1: GitHub REST API integration
 │   │   │   ├── tech_detector.py       # Module 2: Language & framework detection
 │   │   │   ├── code_parser.py         # Module 3: Static AST code parser & graph builder
-│   │   │   ├── gemini_service.py      # Module 4: Google Gemini Free AI integration
-│   │   │   └── viva_service.py        # Module 5: Setup guide & Viva question generator
+│   │   │   ├── gemini_service.py      # Module 4: Google Gemini Free AI integration & comparative analysis
+│   │   │   ├── viva_service.py        # Module 5: Setup guide & Viva question generator
+│   │   │   └── scoring_service.py     # Module 6: 8-category scoring engine & objective weights
 │   │   └── routers/
 │   │       ├── analyze.py             # /api/analyze endpoints
 │   │       ├── ai.py                  # /api/ai/explain-file & /api/ai/chat
-│   │       └── export.py              # /api/export (Markdown, HTML/PDF, JSON)
+│   │       ├── export.py              # /api/export (Markdown, HTML/PDF, JSON)
+│   │       └── compare.py             # /api/compare endpoints & comparison report exports
 │   ├── tests/
-│   │   └── test_analyzer.py           # Pytest test suite
+│   │   ├── test_analyzer.py           # Single repository analysis test suite
+│   │   └── test_compare.py            # Comparison, scoring & objective re-weighting test suite
 │   ├── conftest.py                    # Test configuration
 │   ├── requirements.txt               # Backend dependencies
 │   └── .env                           # Environment variables
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Navbar.tsx             # Header navigation & settings trigger
+│   │   │   ├── Navbar.tsx             # Header navigation & Single/Compare mode switcher
 │   │   │   ├── RepoInput.tsx          # URL input, sample pills & loading steps
 │   │   │   ├── OverviewTab.tsx        # Project summary, stats, languages, tech stack
 │   │   │   ├── FileExplorerTab.tsx    # File tree & syntax-highlighted code viewer
@@ -198,12 +272,21 @@ Git Analyzer/
 │   │   │   ├── AIChatTab.tsx          # Interactive Gemini codebase Q&A chat
 │   │   │   ├── VivaPrepTab.tsx        # Setup instructions & MCA Viva question cards
 │   │   │   ├── ApiKeyModal.tsx        # Google Free Gemini key configuration modal
-│   │   │   └── ExportModal.tsx        # Markdown, HTML/PDF, and JSON export dialog
+│   │   │   ├── ExportModal.tsx        # Single-repo Markdown, HTML/PDF, and JSON export dialog
+│   │   │   └── compare/               # Multi-Repository Comparison Component Suite
+│   │   │       ├── RepositoryComparisonInput.tsx   # 2-3 repository URL inputs & objective picker
+│   │   │       ├── RepositoryComparisonCard.tsx    # Ranked side-by-side repository cards
+│   │   │       ├── ComparisonTable.tsx             # 12-category side-by-side comparison matrix
+│   │   │       ├── TechnologyComparison.tsx        # Shared & unique tech stack breakdown
+│   │   │       ├── ComparisonCharts.tsx            # 8-axis Radar chart & GitHub telemetry bars
+│   │   │       ├── ScoreBreakdown.tsx              # Transparent scoring & objective impact
+│   │   │       ├── AIRecommendation.tsx            # Gemini AI comparative verdict & trade-offs
+│   │   │       └── ComparisonReportExport.tsx      # Comparison export dialog (PDF/HTML, MD, JSON)
 │   │   ├── services/
 │   │   │   └── api.ts                 # Frontend API client
 │   │   ├── types/
 │   │   │   └── index.ts               # TypeScript interface definitions
-│   │   ├── App.tsx                    # Main dashboard application container
+│   │   ├── App.tsx                    # Main dashboard container supporting Single & Compare modes
 │   │   ├── index.css                  # Tailwind styles and animations
 │   │   └── main.tsx                   # React root entry
 │   ├── package.json
@@ -217,7 +300,7 @@ Git Analyzer/
 
 ---
 
-## 7. MCA Viva Defense Tips
+## 9. MCA Viva Defense Tips
 
 When presenting this project for your MCA Mini Project evaluation:
 1. **Highlight Static Analysis vs Runtime Execution:** Emphasize that the system analyzes source code statically using Python's standard `ast` module and regex parsers, meaning it is completely safe and does not execute untrusted third-party code.

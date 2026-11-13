@@ -165,3 +165,91 @@ class FullRepoAnalysis(BaseModel):
     setup_guide: SetupGuide
     viva_questions: List[VivaQuestion]
     ai_summary: Optional[AIProjectSummary] = None
+
+# --- Module 6: Multi-Repository Comparison & Scoring ---
+class CompareRequest(BaseModel):
+    repositories: List[str] = Field(..., description="List of 2 to 3 GitHub repository URLs or owner/repo strings")
+    objective: str = Field("best_overall", description="Comparison objective (e.g. best_overall, beginners, mca_mini_project, final_year_project, portfolio, learning, production)")
+    github_token: Optional[str] = Field(None, description="Optional GitHub Personal Access Token")
+    gemini_api_key: Optional[str] = Field(None, description="Optional Google Gemini API Key")
+
+class CategoryScore(BaseModel):
+    name: str
+    score: float = Field(..., description="Category score out of 100")
+    weight: float = Field(..., description="Weight factor applied")
+    weighted_score: float = Field(..., description="Score multiplied by weight")
+    rationale: str
+    is_heuristic: bool = True
+
+class ScoreBreakdown(BaseModel):
+    code_quality: CategoryScore
+    architecture: CategoryScore
+    documentation: CategoryScore
+    testing: CategoryScore
+    maintainability: CategoryScore
+    technology: CategoryScore
+    activity: CategoryScore
+    security: CategoryScore
+
+class MeasuredMetrics(BaseModel):
+    stars: int = 0
+    forks: int = 0
+    open_issues: int = 0
+    size_kb: int = 0
+    total_files: int = 0
+    total_directories: int = 0
+    source_files_count: int = 0
+    test_files_count: int = 0
+    doc_files_count: int = 0
+    parsed_modules_count: int = 0
+    total_classes: int = 0
+    total_functions: int = 0
+    docstring_coverage_pct: float = 0.0
+    license_name: Optional[str] = None
+    last_updated: Optional[str] = None
+    created_at: Optional[str] = None
+    primary_language: str = "Unknown"
+    technologies_count: int = 0
+
+class RepoComparisonItem(BaseModel):
+    repo_url: str
+    full_name: str
+    metadata: RepoMetadata
+    technology: TechnologyAnalysis
+    measured_metrics: MeasuredMetrics
+    scores: ScoreBreakdown
+    base_score: float
+    weighted_score: float
+    rank: int = 1
+    is_winner: bool = False
+    analysis: FullRepoAnalysis
+
+class RecommendationCategory(BaseModel):
+    winner_repo: str
+    title: str
+    reasoning: str
+
+class AIComparisonRecommendation(BaseModel):
+    summary: str
+    best_overall: RecommendationCategory
+    best_for_beginners: RecommendationCategory
+    best_for_advanced: RecommendationCategory
+    best_for_learning: RecommendationCategory
+    best_for_academic: RecommendationCategory
+    best_architecture: RecommendationCategory
+    best_maintainability: RecommendationCategory
+    strengths: Dict[str, List[str]] = {}
+    weaknesses: Dict[str, List[str]] = {}
+    key_differences: List[str] = []
+    final_verdict: str
+    is_ai_generated: bool = True
+
+class RepoComparisonResponse(BaseModel):
+    repositories: List[RepoComparisonItem]
+    objective: str
+    objective_label: str
+    comparison_date: str
+    ai_recommendation: AIComparisonRecommendation
+    winner_repo_name: str
+    winner_summary: str
+

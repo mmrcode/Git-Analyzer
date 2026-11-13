@@ -9,20 +9,17 @@ from app.services.viva_service import viva_service
 
 router = APIRouter(prefix="/analyze", tags=["Repository Analysis"])
 
-@router.post("", response_model=FullRepoAnalysis)
-async def analyze_repository(request: RepoInputRequest):
+async def analyze_single_repo(
+    url: str,
+    github_token: str = None,
+    gemini_api_key: str = None
+) -> FullRepoAnalysis:
     """
-    Complete end-to-end repository analysis pipeline:
-    1. Validates repository URL and retrieves metadata via GitHub REST API.
-    2. Retrieves recursive Git tree and classifies all files.
-    3. Detects programming languages, frameworks, manifests and dependencies.
-    4. Performs static AST / syntactic parsing on key source files.
-    5. Maps module relationships and dependency graph.
-    6. Synthesizes setup guide and MCA viva examination questions.
-    7. Generates AI architecture overview & project summary with Google Gemini.
+    Core end-to-end repository analysis pipeline.
+    Used by both single-repo analysis and multi-repository comparison.
     """
-    owner, repo = github_service.parse_repo_url(request.url)
-    token = request.github_token
+    owner, repo = github_service.parse_repo_url(url)
+    token = github_token
 
     # 1. Fetch metadata
     metadata = await github_service.fetch_repo_metadata(owner, repo, token)
@@ -104,7 +101,7 @@ async def analyze_repository(request: RepoInputRequest):
         metadata=metadata,
         tech=tech_analysis,
         parsed_files=parsed_code,
-        custom_key=request.gemini_api_key
+        custom_key=gemini_api_key
     )
 
     return FullRepoAnalysis(
@@ -116,6 +113,24 @@ async def analyze_repository(request: RepoInputRequest):
         setup_guide=setup_guide,
         viva_questions=viva_questions,
         ai_summary=ai_summary
+    )
+
+@router.post("", response_model=FullRepoAnalysis)
+async def analyze_repository(request: RepoInputRequest):
+    """
+    Complete end-to-end repository analysis pipeline:
+    1. Validates repository URL and retrieves metadata via GitHub REST API.
+    2. Retrieves recursive Git tree and classifies all files.
+    3. Detects programming languages, frameworks, manifests and dependencies.
+    4. Performs static AST / syntactic parsing on key source files.
+    5. Maps module relationships and dependency graph.
+    6. Synthesizes setup guide and MCA viva examination questions.
+    7. Generates AI architecture overview & project summary with Google Gemini.
+    """
+    return await analyze_single_repo(
+        url=request.url,
+        github_token=request.github_token,
+        gemini_api_key=request.gemini_api_key
     )
 
 @router.get("/file-content")
